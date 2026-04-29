@@ -14,17 +14,21 @@ return new class extends Migration
 public function up()
 {
     Schema::table('posts', function (Blueprint $table) {
-        $table->foreignId('categoria_id')
-              ->constrained('categorias')
-              ->cascadeOnDelete();
-    });
+            $table->decimal('valor', 10, 2)->after('content');
+
+            $table->foreignId('categoria_id')
+                  ->constrained('categorias')
+                  ->cascadeOnDelete();
+
+            $table->boolean('recorrente')->default(false);
+        });
 }
 
 public function down()
 {
-    Schema::table('posts', function (Blueprint $table) {
-        $table->dropForeign(['categoria_id']);
-        $table->dropColumn('categoria_id');
-    });
+     Schema::table('posts', function (Blueprint $table) {
+            $table->dropForeign(['categoria_id']);
+            $table->dropColumn(['valor', 'categoria_id', 'recorrente']);
+        });
 }
 };
