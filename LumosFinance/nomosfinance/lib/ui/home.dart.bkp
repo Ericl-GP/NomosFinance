@@ -1,0 +1,202 @@
+import 'package:flutter/material.dart';
+
+class NomosFinance extends StatefulWidget {
+  const NomosFinance({Key? key}) : super(key: key);
+
+  @override
+  State<NomosFinance> createState() => _NomosFinanceState();
+}
+
+class _NomosFinanceState extends State<NomosFinance> {
+  int _selectedIndex = 0;
+
+  // Cores baseadas no modelo do Canva
+  static const Color primaryColor = Color.fromARGB(255, 148, 147, 147);
+  static const Color darkHeader = Color.fromARGB(255, 57, 58, 58);
+  static const Color cardTop = Color.fromARGB(255, 85, 87, 102);
+  static const Color darkCard = Color.fromARGB(255, 89, 89, 89);
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: primaryColor,
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Header Personalizado (Barra de Título)
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: darkHeader,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  
+                  const CircleAvatar(
+                    child: Icon(Icons.account_circle, size: 30, color: Colors.white),
+                    radius: 15,
+                    backgroundColor: Colors.white24, // Representando o ícone degradê
+                  ),
+                  const SizedBox(width: 15),
+                  const Text(
+                    'Nomos Finance',
+                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ],
+              ),
+            ),
+
+            // Menu de Navegação Superior
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  _navButton('Início', 0),
+                  _navButton('Gastos', 1),
+                  _navButton('Comprovantes/Recibos', 2),
+                ],
+              ),
+            ),
+
+            const Divider(color: Colors.black26, thickness: 2, indent: 16, endIndent: 16, height: 30),
+
+            // Conteúdo Dinâmico
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: _buildPageContent(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _navButton(String label, int index) {
+    bool isSelected = _selectedIndex == index;
+    return GestureDetector(
+      onTap: () => _onItemTapped(index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color.fromARGB(255, 89, 133, 255).withOpacity(0.5) : Colors.transparent,
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: isSelected ? Colors.black : Colors.black87,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPageContent() {
+    switch (_selectedIndex) {
+      case 0: return _buildInicio();
+      case 1: return _buildGastos();
+      case 2: return _buildComprovantes();
+      default: return Container();
+    }
+  }
+
+  // --- TELA INICIO ---
+  Widget _buildInicio() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ...List.generate(3, (index) => _longCard("Exemplo", cardTop)),
+        const SizedBox(height: 20),
+        const Center(child: Text("Maiores Gastos do Mês", style: TextStyle(fontWeight: FontWeight.bold))),
+        const Divider(color: Colors.black),
+        const SizedBox(height: 10),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: List.generate(3, (index) => _squareCard("Exemplo", darkCard, 100)),
+        )
+      ],
+    );
+  }
+
+  // --- TELA GASTOS ---
+  Widget _buildGastos() {
+    return Column(
+      children: List.generate(6, (index) => _longCard("Exemplo", cardTop)),
+    );
+  }
+
+  // --- TELA COMPROVANTES ---
+  Widget _buildComprovantes() {
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+      ),
+      itemCount: 6,
+      itemBuilder: (context, index) => GestureDetector(
+        onTap: () => _showImageDialog(context),
+        child: Container(
+          decoration: BoxDecoration(
+            color: cardTop,
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Widgets Auxiliares de UI
+  Widget _longCard(String text, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      height: 50,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
+      child: Row(
+        children: [
+          const SizedBox(width: 10),
+          const CircleAvatar(radius: 12, backgroundColor: Colors.white30),
+          Expanded(child: Center(child: Text(text, style: const TextStyle(fontWeight: FontWeight.bold)))),
+        ],
+      ),
+    );
+  }
+
+  Widget _squareCard(String text, Color color, double size) {
+    return Container(
+      width: size,
+      height: size + 40,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(5)),
+      child: Center(child: Text(text, style: const TextStyle(color: Colors.white))),
+    );
+  }
+
+  void _showImageDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          width: 300,
+          height: 400,
+          color: cardTop,
+          child: const Center(child: Text("Imagem Expandida")),
+        ),
+      ),
+    );
+  }
+}
