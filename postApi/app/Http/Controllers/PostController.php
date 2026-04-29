@@ -32,8 +32,9 @@ class PostController extends Controller
         'title' => 'required|string|max:255',
         'content' => 'required|string',
         'valor' => 'required|numeric',
-        'categoria_id' => 'required|exists:categorias,id', // Valida se o ID existe na tabela categorias
+        'categoria_id' => 'required|exists:categorias,id',
         'recorrente' => 'required|boolean',
+        'imagem' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Validação da imagem
     ]);
 
     if ($validator->fails()) {
@@ -43,14 +44,24 @@ class PostController extends Controller
         ], 422);
     }
 
-    $post = Post::create([
-        'title' => $request->title,
-        'content' => $request->content,
-        'valor' => $request->valor,
-        'categoria_id' => $request->categoria_id,
-        'recorrente' => $request->recorrente,
-        'user_id' => $request->user()->id
-    ]);
+    $data = $request->only(['title', 'content', 'valor', 'categoria_id', 'recorrente']);
+    $data['user_id'] = $request->user()->id;
+
+    // DEBUG: Verificar se imagem foi enviada
+    \Log::info('DEBUG Store - Request hasFile imagem: ' . ($request->hasFile('imagem') ? 'SIM' : 'NAO'));
+    \Log::info('DEBUG Store - Request file imagem: ' . ($request->file('imagem') ? 'SIM' : 'NAO'));
+
+    // Upload da imagem se existir
+    if ($request->hasFile('imagem')) {
+        $path = $request->file('imagem')->store('comprovantes', 'public');
+        $data['imagem'] = $path;
+        \Log::info('DEBUG Store - Imagem salva em: ' . $path);
+    } else {
+        \Log::info('DEBUG Store - Nenhuma imagem para salvar');
+    }
+
+    $post = Post::create($data);
+    \Log::info('DEBUG Store - Post criado com ID: ' . $post->id . ', imagem: ' . ($post->imagem ?? 'null'));
 
     return response()->json($post, 201);
 }
@@ -88,6 +99,7 @@ class PostController extends Controller
             'valor' => 'required|numeric',
             'categoria_id' => 'required|exists:categorias,id',
             'recorrente' => 'required|boolean',
+            'imagem' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Validação da imagem
         ]);
 
         if ($validator->fails()) {
@@ -97,7 +109,29 @@ class PostController extends Controller
             ], 422);
         }
 
-        $post->update($validator->validated());
+        $data = $request->only(['title', 'content', 'valor', 'categoria_id', 'recorrente']);
+
+        // DEBUG: Verificar se imagem foi enviada
+        \Log::info('DEBUG Update - Post ID: ' . $id . ', imagem atual: ' . ($post->imagem ?? 'null'));
+        \Log::info('DEBUG Update - Request hasFile imagem: ' . ($request->hasFile('imagem') ? 'SIM' : 'NAO'));
+
+        // Upload da nova imagem se existir
+        if ($request->hasFile('imagem')) {
+            // Remove a imagem antiga se existir
+            if ($post->imagem && \Storage::disk('public')->exists($post->imagem)) {
+                \Storage::disk('public')->delete($post->imagem);
+                \Log::info('DEBUG Update - Imagem antiga removida: ' . $post->imagem);
+            }
+
+            $path = $request->file('imagem')->store('comprovantes', 'public');
+            $data['imagem'] = $path;
+            \Log::info('DEBUG Update - Nova imagem salva em: ' . $path);
+        } else {
+            \Log::info('DEBUG Update - Nenhuma nova imagem para salvar');
+        }
+
+        $post->update($data);
+        \Log::info('DEBUG Update - Post atualizado, nova imagem: ' . ($post->fresh()->imagem ?? 'null'));
 
         return response()->json($post, 200);
     }
@@ -129,5 +163,11 @@ class PostController extends Controller
         $posts = Post::where('user_id', $id)->orderBy('created_at', 'desc')->get();
 
         return response()->json($posts);
+    }
+
+    public function getCategorias()
+    {
+        $categorias = \App\Models\Categoria::all();
+        return response()->json($categorias);
     }
 }

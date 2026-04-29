@@ -5,6 +5,7 @@ class Post {
   final double valor; // Novo campo
   final int categoriaId; // FK para categorias
   final bool recorrente; // tinyint no banco
+  final String? imagem;
 
   Post({
     this.id,
@@ -13,6 +14,7 @@ class Post {
     required this.valor,
     required this.categoriaId,
     this.recorrente = false,
+    this.imagem,
   });
 
   factory Post.fromJson(Map<String, dynamic> json) {
@@ -24,6 +26,7 @@ class Post {
       valor: json['valor'] != null ? double.parse(json['valor'].toString()) : 0.0,
       categoriaId: json['categoria_id'] ?? 1,
       recorrente: json['recorrente'] == 1 || json['recorrente'] == true,
+      imagem: json['imagem'] as String?,
     );
   }
 
@@ -35,6 +38,7 @@ class Post {
       'valor': valor,
       'categoria_id': categoriaId,
       'recorrente': recorrente ? 1 : 0,
+      if (imagem != null) 'imagem': imagem,
     };
   }
 }

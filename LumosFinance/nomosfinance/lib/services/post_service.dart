@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import '../data/post_model.dart';
 import '../utils/constants.dart';
 import 'auth_service.dart';
+import 'dart:io';
+
 
 
 class PostService {
@@ -37,16 +39,59 @@ class PostService {
     return [];
   }
 
-  Future<bool> savePost(Post post) async {
-    final token = await _authService.getToken();
-    if (token == null || token.isEmpty) return false;
+Future<bool> savePost(Post post, {File? imagem}) async {
+  final token = await _authService.getToken();
+  if (token == null || token.isEmpty) return false;
 
-    final isUpdate = post.id != null;
-    final url = isUpdate
-        ? '${ApiConstants.baseUrl}/posts/${post.id}'
-        : '${ApiConstants.baseUrl}/posts';
+  final isUpdate = post.id != null;
+  final url = isUpdate
+      ? '${ApiConstants.baseUrl}/posts/${post.id}'
+      : '${ApiConstants.baseUrl}/posts';
 
+  print('DEBUG Flutter - savePost: isUpdate=$isUpdate, url=$url, imagem=${imagem?.path}');
+
+  try {
+    // 📷 SE TEM IMAGEM → MULTIPART
+    if (imagem != null) {
+      print('DEBUG Flutter - Enviando multipart com imagem');
+      var request = http.MultipartRequest(
+        isUpdate ? 'POST' : 'POST', // Laravel geralmente usa POST + _method
+        Uri.parse(url),
+      );
+
+      request.headers['Authorization'] = 'Bearer $token';
+      request.headers['Accept'] = 'application/json';
+
+      // 🔥 IMPORTANTE para update
+      if (isUpdate) {
+        request.fields['_method'] = 'PUT';
+      }
+
+      // Campos
+      request.fields['title'] = post.title;
+      request.fields['content'] = post.content;
+      request.fields['valor'] = post.valor.toString();
+      request.fields['categoria_id'] = post.categoriaId.toString();
+      request.fields['recorrente'] = post.recorrente ? '1' : '0';
+
+      // Imagem
+      request.files.add(
+        await http.MultipartFile.fromPath('imagem', imagem.path),
+      );
+
+      print('DEBUG Flutter - Campos enviados: ${request.fields}');
+      print('DEBUG Flutter - Arquivos enviados: ${request.files.length}');
+
+      var response = await request.send();
+      print('DEBUG Flutter - Response status: ${response.statusCode}');
+
+      return response.statusCode == 200 || response.statusCode == 201;
+    }
+
+    // 🧾 SEM IMAGEM → JSON normal (seu código)
+    print('DEBUG Flutter - Enviando JSON sem imagem');
     late final http.Response response;
+
     if (isUpdate) {
       response = await http.put(
         Uri.parse(url),
@@ -68,10 +113,15 @@ class PostService {
         body: jsonEncode(post.toJson()),
       );
     }
+
     return response.statusCode == 200 ||
         response.statusCode == 201 ||
         response.statusCode == 204;
+  } catch (e) {
+    print('Erro ao salvar post: $e');
+    return false;
   }
+}
 
   Future<bool> deletePost(int id) async {
     final token = await _authService.getToken();
@@ -85,7 +135,13 @@ class PostService {
   }
 
   Future<List<dynamic>> getCategorias() async {
-  final response = await http.get(Uri.parse('${ApiConstants.baseUrl}/categorias'));
+  final token = await _authService.getToken();
+  if (token == null || token.isEmpty) return [];
+
+  final response = await http.get(
+    Uri.parse('${ApiConstants.baseUrl}/categorias'),
+    headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+  );
 
   if (response.statusCode == 200) {
     return jsonDecode(response.body);
@@ -93,5 +149,8 @@ class PostService {
     throw Exception('Erro ao carregar categorias');
   }
 }
+// Novo método para salvar post com imagem
+
+
 }
 

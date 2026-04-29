@@ -14,7 +14,8 @@ class Post extends Model
         'valor',
         'categoria_id',
         'recorrente',
-        'user_id'
+        'user_id',
+        'imagem'
     ];
 
     public function user()
