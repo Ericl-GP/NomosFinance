@@ -53,6 +53,80 @@ class AuthService {
       return false;
     }
   }
+Future<Map<String, dynamic>> register(String name, String email, String password) async {
+    final url = Uri.parse(
+      '${ApiConstants.baseUrl}${ApiConstants.registerEndpoint}', 
+    );
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json', // Importante para receber os erros de validação em JSON
+        },
+        body: jsonEncode({
+          'name': name,
+          'email': email,
+          'password': password,
+          'password_confirmation': password, 
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      // Sucesso! (Código 200 ou 201)
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        
+        // 1. Extrai o token e o usuário exatamente igual ao seu método de login
+        final token = data['access_token'] ?? data['token'];
+        final user = data['user'];
+
+        if (token is! String || token.isEmpty) {
+          print('Token ausente na resposta de registro: ${response.body}');
+          return {'success': false, 'message': 'Token não retornado pelo servidor.'};
+        }
+
+        // 2. Salva o token usando a SUA função privada que já existe! (Auto-login)
+        await _saveToken(token);
+
+        // 3. Salva os dados do usuário usando as SUAS funções privadas!
+        if (user is Map<String, dynamic>) {
+          final userName = user['name'] as String?;
+          final userEmail = user['email'] as String?;
+          if (userName != null && userName.isNotEmpty) {
+            await _saveUserName(userName);
+          }
+          if (userEmail != null && userEmail.isNotEmpty) {
+            await _saveEmail(userEmail);
+          }
+        }
+
+        return {'success': true};
+      } 
+      // Erro de Validação do Laravel (Código 422 - Ex: Email já existe)
+      else if (response.statusCode == 422) {
+        String errorMessage = 'Erro de validação nos dados.';
+        
+        if (data['errors'] != null) {
+          final Map<String, dynamic> errors = data['errors'];
+          errorMessage = errors.values.first[0]; // Pega a mensagem específica (ex: "The email has already been taken")
+        } else if (data['message'] != null) {
+          errorMessage = data['message'];
+        }
+        
+        return {'success': false, 'message': errorMessage};
+      } 
+      // Qualquer outro erro
+      else {
+        print('Erro no registro: ${response.body}');
+        return {'success': false, 'message': 'Erro no servidor: ${response.statusCode}'};
+      }
+    } catch (e) {
+      print('Erro de conexão: $e');
+      return {'success': false, 'message': 'Erro de conexão com o servidor.'};
+    }
+  }
 
   // Persistindo o Token com Shared Preferences
   Future<void> _saveToken(String token) async {

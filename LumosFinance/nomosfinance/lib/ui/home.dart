@@ -13,6 +13,49 @@ class NomosFinance extends StatefulWidget {
   State<NomosFinance> createState() => _NomosFinanceState();
 }
 
+class post {
+  final int id;
+  final String title;
+  final String content;
+  final double valor;
+  final int categoriaId;
+  final bool recorrente;
+  final String? imagem;
+
+  post({
+    required this.id,
+    required this.title,
+    required this.content,
+    required this.valor,
+    required this.categoriaId,
+    required this.recorrente,
+    this.imagem,
+  });
+
+
+
+  factory post.fromJson(Map<String, dynamic> json) {
+    return post(
+      id: json['id'],
+      title: json['title'],
+      content: json['content'],
+      valor: (json['valor'] as num).toDouble(),
+      categoriaId: json['categoria_id'],
+      recorrente: json['recorrente'],
+      imagem: json['imagem'], // Pode ser nulo
+    );
+  }
+}
+List<Post> getMaioresGastos(List<Post> todosOsPosts) {
+  // Cria uma cópia para não alterar a ordem da lista original do feed
+  List<Post> listaOrdenada = List.from(todosOsPosts);
+  
+  // Ordena do maior para o menor (b.compareTo(a))
+  listaOrdenada.sort((a, b) => b.valor.compareTo(a.valor));
+  
+  return listaOrdenada; // O índice 0 será sempre o maior gasto!
+}
+
 class _NomosFinanceState extends State<NomosFinance> {
   final PostService _postService = PostService();
   final AuthService _authService = AuthService();
@@ -172,7 +215,9 @@ class _NomosFinanceState extends State<NomosFinance> {
   }
 
   Widget _buildInicio(List<Post> posts) {
-    posts = posts.take(10).toList();
+    
+    final maioresGastos = getMaioresGastos(posts);
+              
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -180,28 +225,51 @@ class _NomosFinanceState extends State<NomosFinance> {
         children: [
           // Mapeia os títulos dos posts reais para os cards verdes
           ...posts.take(3).map((post) => _longCard(post, const Color.fromARGB(255, 85, 87, 102))).toList(),
+          
           const SizedBox(height: 16),
+          
           const Text(
             'Maiores Gastos do Mês',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
+          
           const Divider(color: Colors.black),
+          
           const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _squareCard('Exemplo', const Color.fromARGB(255, 74, 74, 74), 100),
-              _squareCard('Exemplo', const Color.fromARGB(255, 74, 74, 74), 100),
-              _squareCard('Exemplo', const Color.fromARGB(255, 74, 74, 74), 100),
-            ],
-          ),
+          
+          // REMOVIDO A ROW DAQUI! O Container vai direto na Column.
+          
+          // 2. Cria a seção na interface:
+          Container(
+            height: 140, // Altura obrigatória para ListView horizontal
+            // Como está dentro de uma Column, a largura será travada no tamanho da tela! (Isso evita o erro)
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal, // Rola para os lados
+              padding: const EdgeInsets.symmetric(horizontal: 0), // Removi o padding daqui pois o SingleChildScrollView já tem
+              itemCount: maioresGastos.length > 5 ? 5 : maioresGastos.length, // Mostra no máximo o Top 5
+              itemBuilder: (context, index) {
+                final post = maioresGastos[index];
+                
+                // O primeiro (maior de todos) fica vermelho, os outros laranjas
+                final cardColor = index == 0 ? Colors.red[400]! : Colors.orange[400]!;
+
+                return _squareCard(
+                  title: post.title,  // Confirme se a sua variável do Model se chama "title" ou "titulo"
+                  valor: post.valor,
+                  color: cardColor,
+                  size: 110,
+                );
+              },
+            ),
+          )
+          
         ],
       ),
     );
   }
 
   Widget _buildGastos(List<Post> posts) {
-    posts = posts.where((p) => p.imagem == null).toList();
+    
     return ListView.builder(
       padding: const EdgeInsets.all(16),
       itemCount: posts.length,
@@ -420,21 +488,61 @@ class _NomosFinanceState extends State<NomosFinance> {
     );
   }
 
-  Widget _squareCard(String text, Color color, double size) {
-    return Container(
-      width: size,
-      height: size + 20,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Center(
-        child: Text(
-          text,
-          style: const TextStyle(color: Colors.white),
-          textAlign: TextAlign.center,
+  Widget _squareCard(
+  {
+  required String title,
+  required double valor,
+  required Color color,
+  required double size,}
+) {
+
+   
+    
+  return Container(
+
+   
+    width: size,
+    height: size + 20,
+    padding: const EdgeInsets.all(12), // Dá um respiro interno
+    margin: const EdgeInsets.only(right: 12), // Espaçamento entre os cards
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(12), // Bordas um pouco mais arredondadas
+      boxShadow: const [
+        BoxShadow(
+          color: Colors.black12,
+          blurRadius: 6,
+          offset: Offset(0, 3), // Sombreado leve estilo financeiro
         ),
-      ),
-    );
-  }
+      ],
+    ),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Título do Gasto (Ex: "Aluguel")
+        Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white70, // Branco mais suave
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis, // Coloca "..." se o nome for grande
+        ),
+        const SizedBox(height: 8),
+        // Valor do Gasto (Ex: "R$ 1500.00")
+        Text(
+          'R\$ ${valor.toStringAsFixed(2)}', // Formata com 2 casas decimais
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    ),
+  );
+}
 }

@@ -4,6 +4,7 @@ import '../services/post_service.dart';
 import '../utils/constants.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
+import 'package:flutter/services.dart';
 
 class PostFormScreen extends StatefulWidget {
 
@@ -57,7 +58,16 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
       valor: double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0.0,
       categoriaId: _categoriaId,
       recorrente: _recorrente,
+);
+    if (novoPost.valor == null || novoPost.valor <= 0) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Por favor, insira um valor numérico válido.'),
+        backgroundColor: Colors.red,
+      ),
     );
+    return; // Para a execução aqui, não envia para a API
+  }
 
     // Usa o seu PostService perfeitamente!
     final sucesso = await _postService.savePost(novoPost, imagem: _imagem);
@@ -102,7 +112,11 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
               const SizedBox(height: 16),
               TextFormField(
                 controller: _valorController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                // 1. Força o teclado do celular a abrir já nos números
+                keyboardType: const TextInputType.numberWithOptions(decimal: true), 
+                
+                // 2. Bloqueia qualquer coisa que não seja número, ponto ou vírgula
+                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
                 decoration: const InputDecoration(labelText: 'Valor (R\$)'),
                 validator: (v) => v!.isEmpty ? 'Insira o valor' : null,
               ),

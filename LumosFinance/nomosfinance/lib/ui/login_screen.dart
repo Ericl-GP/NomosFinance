@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'home.dart';
+import 'register_screen.dart'; // Importa a tela de registro para o link
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -149,7 +150,32 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                       ),
+                      
                     ),
+
+                    SizedBox(
+                      
+                      width: double.infinity,
+                      child: TextButton(
+                        onPressed: () {
+                          // Navegar para a tela de registro
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const RegisterScreen(),
+                            ),
+                          );
+                        },
+                        child: Text(
+                          'Não tem uma conta? Cadastre-se',
+                          style: TextStyle(color: Color(0xFF2563EB)),
+                        ),
+                      ),
+                    ),
+
+                       
+                    
+                    
                   ],
                 ),
               ),
