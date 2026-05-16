@@ -22,6 +22,39 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _authService = AuthService();
   bool _isLoading = false;
 
+  // 1. Variáveis para guardar as mensagens de erro (se forem nulas, o campo fica normal)
+  String? _passwordError;
+  String? _confirmPasswordError;
+
+  // 2. Função que valida a senha enquanto o usuário digita
+  void _validatePassword(String value) {
+    setState(() {
+      if (value.isNotEmpty && value.length < 6) {
+        _passwordError = 'A senha deve ter no mínimo 6 caracteres';
+      } else {
+        _passwordError = null;
+      }
+      
+      // Também revalida a confirmação caso a senha principal mude
+      if (_confirmPasswordController.text.isNotEmpty) {
+        _validateConfirmPassword(_confirmPasswordController.text);
+      }
+    });
+  }
+
+  // 3. Função que valida a confirmação de senha
+  void _validateConfirmPassword(String value) {
+    setState(() {
+      if (value.isNotEmpty && value != _passwordController.text) {
+        _confirmPasswordError = 'As senhas não coincidem';
+      } else {
+        _confirmPasswordError = null;
+      }
+    });
+  }
+  
+  // ... resto do seu código (_handleRegister, etc) ...
+
   void _handleRegister() async {
    // Na tela de Registro (register_screen.dart)
     
@@ -135,20 +168,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         placeholder: 'seu@email.com',
                       ),
                       const SizedBox(height: 20),
+                      // Campo de Senha
                       _buildTextField(
                         label: 'Senha',
                         controller: _passwordController,
                         icon: Icons.lock_outline,
                         isPassword: true,
                         placeholder: '••••••••',
+                        errorText: _passwordError, // <-- Conectado
+                        onChanged: _validatePassword, // <-- Conectado
                       ),
                       const SizedBox(height: 20),
+                      
+                      // Campo de Confirmar Senha
                       _buildTextField(
                         label: 'Confirmar Senha',
                         controller: _confirmPasswordController,
                         icon: Icons.lock_reset,
                         isPassword: true,
                         placeholder: '••••••••',
+                        errorText: _confirmPasswordError, // <-- Conectado
+                        onChanged: _validateConfirmPassword, // <-- Conectado
                       ),
                       const SizedBox(height: 30),
 
@@ -205,12 +245,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   // Widget utilitário idêntico ao do LoginScreen
+ // Widget utilitário atualizado com suporte a erros
   Widget _buildTextField({
     required String label,
     required TextEditingController controller,
     required IconData icon,
     bool isPassword = false,
     required String placeholder,
+    String? errorText, // <-- Adicionamos isso
+    Function(String)? onChanged, // <-- Adicionamos isso
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,11 +269,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         TextField(
           controller: controller,
           obscureText: isPassword,
+          onChanged: onChanged, // <-- Avisa a tela sempre que uma letra é digitada
           decoration: InputDecoration(
             hintText: placeholder,
+            errorText: errorText, // <-- Se tiver erro, fica vermelho sozinho!
             prefixIcon: Icon(icon, size: 20),
             filled: true,
-            fillColor: const Color.fromARGB(106, 50, 121, 76), 
+            fillColor: const Color.fromARGB(106, 50, 121, 76),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: Color.fromARGB(255, 211, 217, 210)),
@@ -242,6 +287,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: const BorderSide(color: Color.fromARGB(255, 88, 106, 144), width: 2),
+            ),
+            // Borda customizada para quando der erro
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.red, width: 1.5),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.red, width: 2),
             ),
           ),
         ),
