@@ -7,6 +7,7 @@ import '../utils/constants.dart';
 import 'login_screen.dart';
 import 'post_form_screen.dart';
 import 'package:reorderable_grid_view/reorderable_grid_view.dart';
+import 'package:table_calendar/table_calendar.dart';
 
 
 
@@ -68,7 +69,9 @@ class _NomosFinanceState extends State<NomosFinance> {
   final PostService _postService = PostService();
   final AuthService _authService = AuthService();
   List<Post>? _comprovantesOrdenados;
-  List<Post>? _topGastosPersonalizados; // <-- Adicione isso junto das outras variáveis
+  List<Post>? _topGastosPersonalizados; 
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay = DateTime.now();// <-- Adicione isso junto das outras variáveis
   
   int _selectedIndex = 0;
   String _userName = "Carregando...";
@@ -114,11 +117,15 @@ class _NomosFinanceState extends State<NomosFinance> {
           
           // Se o PostFormScreen retornou true (sucesso), recarrega a lista
           if (refresh == true) {
-            setState(() => _refreshKey++); // Incrementa chave para forçar refresh
-          }
+            setState(() {
+              _comprovantesOrdenados = null; // LIMPA O CACHE
+              _topGastosPersonalizados = null; // LIMPA O CACHE
+              _refreshKey++; 
+            });
+          };
         },
       ),
-      backgroundColor: const Color.fromARGB(223, 206, 206, 206), // Fundo branco semi-transparente para destacar os cards
+      backgroundColor: const Color.fromARGB(255, 243, 224, 224), // Fundo branco semi-transparente para destacar os cards
       body: SafeArea(
         child: Column(
           children: [
@@ -392,11 +399,13 @@ class _NomosFinanceState extends State<NomosFinance> {
 
 // Para a aba de Comprovantes, vamos usar um GridView para mostrar os posts como "comprovantes"
  Widget _buildComprovantes(List<Post> posts) {
-    // Inicializa a lista ordenável apenas na primeira vez que a aba abre
     if (_comprovantesOrdenados == null) {
-      _comprovantesOrdenados = posts.where((p) => p.imagem != null).toList();
+      // 1. Filtra os posts com imagem
+      var filtrados = posts.where((p) => p.imagem != null).toList();
+      // 2. SISTEMA DE HISTÓRICO: Ordena por data decrescente (mais recentes primeiro)
+      filtrados.sort((a, b) => b.data.compareTo(a.data));
+      _comprovantesOrdenados = filtrados;
     }
-    
     return Padding(
       padding: const EdgeInsets.all(16),
       child: ReorderableGridView.builder(
@@ -634,7 +643,7 @@ class _NomosFinanceState extends State<NomosFinance> {
   required double valor,
   required Color color,
   required double size,}
-) {
+  ) {
 
    
     
@@ -685,6 +694,149 @@ class _NomosFinanceState extends State<NomosFinance> {
     ),
   );
 }
+
+Widget _buildCalendario(List<Post> posts) {
+    // Filtra apenas os posts/anotações criados no dia selecionado no calendário
+    final notasDoDia = posts.where((post) {
+      return post.data.year == _selectedDay?.year &&
+             post.data.month == _selectedDay?.month &&
+             post.data.day == _selectedDay?.day;
+    }).toList();
+
+    return Column(
+      children: [
+        // Componente do Calendário Personalizado
+        TableCalendar(
+          firstDay: DateTime.utc(2020, 1, 1),
+          lastDay: DateTime.utc(2030, 12, 31),
+          focusedDay: _focusedDay,
+          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+          onDaySelected: (selectedDay, focusedDay) {
+            setState(() {
+              _selectedDay = selectedDay;
+              _focusedDay = focusedDay; // Atualiza o foco do mês
+            });
+          },
+          calendarStyle: const CalendarStyle(
+            selectedDecoration: BoxDecoration(
+              color: Color(0xFF2563EB), // Azul do app
+              shape: BoxShape.circle,
+            ),
+            todayDecoration: BoxDecoration(
+              color: Colors.blueGrey,
+              shape: BoxShape.circle,
+            ),
+          ),
+          headerStyle: const HeaderStyle(
+            formatButtonVisible: false, // Esconde o botão de mudar formato de semana/mês
+            titleCentered: true,
+          ),
+        ),
+        
+        const Divider(height: 20, thickness: 1),
+        
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Anotações do Dia: ${_selectedDay!.day}/${_selectedDay!.month}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              // Indicador visual de quantidade
+              Chip(
+                label: Text('${notasDoDia.length}'),
+                backgroundColor: const Color(0xFF2EC4B6).withOpacity(0.2),
+              ),
+            ],
+          ),
+        ),
+        
+        // Lista de Notas do dia selecionado
+        Expanded(
+          child: notasDoDia.isEmpty
+              ? const Center(child: Text('Nenhuma anotação para este dia.'))
+              : ListView.builder(
+                  padding: const EdgeInsets.all(16),
+                  itemCount: notasDoDia.length,
+                  itemBuilder: (context, index) {
+                    final nota = notasDoDia[index];
+                    return Card(
+                      elevation: 2,
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: ListTile(
+                        leading: const Icon(Icons.note_alt, color: Color(0xFF2EC4B6)),
+                        title: Text(
+                          nota.title,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          nota.content,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                        // REQUISITO: Ao clicar, exibe a descrição completa
+                        onTap: () => _mostrarDescricaoNota(nota),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  // Janela modal para ler os detalhes da anotação
+  void _mostrarDescricaoNota(Post post) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    post.title,
+                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'R\$ ${post.valor.toStringAsFixed(2)}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Data: ${post.data.day}/${post.data.month}/${post.data.year}',
+                style: const TextStyle(color: Colors.grey),
+              ),
+              const Divider(height: 30),
+              const Text(
+                'Descrição / Anotação:',
+                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14, color: Colors.black54),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                post.content,
+                style: const TextStyle(fontSize: 16, height: 1.4),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
 // Coloque no final do arquivo
 class MyCustomScrollBehavior extends MaterialScrollBehavior {

@@ -4,6 +4,8 @@ import '../data/post_model.dart';
 import '../utils/constants.dart';
 import 'auth_service.dart';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb; // <-- IMPORTANTE PARA A WEB
+import 'package:image_picker/image_picker.dart'; // <-- IMPORTANTE PARA O XFILE
 
 
 
@@ -39,7 +41,7 @@ class PostService {
     return [];
   }
 
-Future<bool> savePost(Post post, {File? imagem}) async {
+Future<bool> savePost(Post post, {XFile? imagem}) async {
   final token = await _authService.getToken();
   if (token == null || token.isEmpty) return false;
 
@@ -66,7 +68,19 @@ Future<bool> savePost(Post post, {File? imagem}) async {
       if (isUpdate) {
         request.fields['_method'] = 'PUT';
       }
-
+      if (kIsWeb) {
+          // Na web, lemos os bytes da imagem na memória e enviamos
+          final bytes = await imagem.readAsBytes();
+          request.files.add(
+            http.MultipartFile.fromBytes('imagem', bytes, filename: imagem.name)
+          );
+        } else {
+          // No celular (Android/iOS/Windows), o fromPath funciona perfeitamente
+          request.files.add(
+            await http.MultipartFile.fromPath('imagem', imagem.path)
+          );
+        }
+        
       // Campos
       request.fields['title'] = post.title;
       request.fields['content'] = post.content;
@@ -75,18 +89,15 @@ Future<bool> savePost(Post post, {File? imagem}) async {
       request.fields['recorrente'] = post.recorrente ? '1' : '0';
 
       // Imagem
-      request.files.add(
-        await http.MultipartFile.fromPath('imagem', imagem.path),
-      );
+    
 
       print('DEBUG Flutter - Campos enviados: ${request.fields}');
       print('DEBUG Flutter - Arquivos enviados: ${request.files.length}');
 
-      var response = await request.send();
-      print('DEBUG Flutter - Response status: ${response.statusCode}');
-
-      return response.statusCode == 200 || response.statusCode == 201;
+     var response = await request.send();
+        return response.statusCode == 200 || response.statusCode == 201;
     }
+      
 
     // 🧾 SEM IMAGEM → JSON normal (seu código)
     print('DEBUG Flutter - Enviando JSON sem imagem');

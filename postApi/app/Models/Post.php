@@ -15,7 +15,13 @@ class Post extends Model
         'categoria_id',
         'recorrente',
         'user_id',
-        'imagem'
+        'imagem',
+        'data',
+    ];
+    protected $casts = [
+    'data' => 'datetime',
+    'recorrente' => 'boolean',
+    'valor' => 'double',
     ];
 
     public function user()

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'ui/login_screen.dart';
+import 'services/notification_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await NotificationService().initNotification(); // Inicializa o serviço de notificações antes de rodar o app
+
   runApp(const MyApp());
+
 }
 
 class MyApp extends StatelessWidget {

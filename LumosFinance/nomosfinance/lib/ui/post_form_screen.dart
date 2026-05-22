@@ -5,6 +5,12 @@ import '../utils/constants.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
+import '../services/notification_service.dart';
+import 'dart:math'; // Adicione para gerar números aleatórios
+import '../services/notification_service.dart'; // Adicione para chamar a notificação
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+
 
 class PostFormScreen extends StatefulWidget {
 
@@ -22,7 +28,7 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
   final _valorController = TextEditingController();
-  File? _imagem;
+  XFile? _imagem;
   final ImagePicker _picker = ImagePicker();
   
   int _categoriaId = 1; 
@@ -58,6 +64,7 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
       valor: double.tryParse(_valorController.text.replaceAll(',', '.')) ?? 0.0,
       categoriaId: _categoriaId,
       recorrente: _recorrente,
+      data: DateTime.now(), // Define a data atual para o post
 );
     if (novoPost.valor == null || novoPost.valor <= 0) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -75,7 +82,22 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
     setState(() => _isLoading = false);
 
     if (sucesso && mounted) {
+      // ==========================================
+      // É AQUI QUE VOCÊ PASSA O ID E DISPARA!
+      // ==========================================
+      NotificationService().mostrarNotificacaoImediata(
+        id: Random().nextInt(100000), // Gera um ID único e aleatório para não sobrepor
+        title: 'Nomos Finance',
+        body: 'O registro "${_titleController.text}" foi salvo com sucesso!',
+      );
+
+      
       Navigator.pop(context, true); // Retorna true para a Home atualizar a lista
+      NotificationService().mostrarNotificacaoImediata(
+      id: 1, 
+      title: 'Nova Anotação no Calendário!', 
+      body: 'O lembrete "${_titleController.text}" foi salvo com sucesso.'
+    );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Erro ao salvar o gasto.')),
@@ -160,7 +182,9 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
               if (_imagem != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
-                  child: Image.file(_imagem!, height: 150),
+                  child: kIsWeb 
+                      ? Image.network(_imagem!.path, height: 150) 
+                      : Image.file(File(_imagem!.path), height: 150),
                 ),
               // Mostrar imagem existente se estiver editando
               if (widget.post != null && widget.post!.imagem != null && _imagem == null)
@@ -202,7 +226,7 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
   final foto = await _picker.pickImage(source: ImageSource.camera);
   if (foto != null) {
     setState(() {
-      _imagem = File(foto.path);
+      _imagem = XFile(foto.path);
     });
   }
 
@@ -211,7 +235,7 @@ Future<void> _selecionarImagem() async {// Função para selecionar imagem da ga
   final img = await _picker.pickImage(source: ImageSource.gallery);
   if (img != null) {
     setState(() {
-      _imagem = File(img.path);
+      _imagem = XFile(img.path);
     });
   }
 }
