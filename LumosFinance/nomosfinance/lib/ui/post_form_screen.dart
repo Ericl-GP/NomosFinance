@@ -31,10 +31,25 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
   XFile? _imagem;
   final ImagePicker _picker = ImagePicker();
   
+  DateTime _dataSelecionada = DateTime.now();
   int _categoriaId = 1; 
   bool _recorrente = false;
   bool _isLoading = false;
 
+
+  Future<void> _selecionarData(BuildContext context) async {
+  final DateTime? colhida = await showDatePicker(
+    context: context,
+    initialDate: _dataSelecionada,
+    firstDate: DateTime(2020),
+    lastDate: DateTime(2030),
+  );
+  if (colhida != null && colhida != _dataSelecionada) {
+    setState(() {
+      _dataSelecionada = colhida;
+    });
+  }
+}
   final PostService _postService = PostService();
 
   @override
@@ -115,9 +130,12 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
       ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
-        child: Form(
+        child: Form( // O formulário para criar/editar o post
+          
           key: _formKey,
-          child: ListView(
+
+          
+          child: ListView( // Use ListView para permitir rolagem quando o teclado abrir
             children: [
               TextFormField(
                 controller: _titleController,
@@ -132,7 +150,7 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
                 validator: (v) => v!.isEmpty ? 'Campo obrigatório' : null,
               ),
               const SizedBox(height: 16),
-              TextFormField(
+              TextFormField( // Campo de valor
                 controller: _valorController,
                 // 1. Força o teclado do celular a abrir já nos números
                 keyboardType: const TextInputType.numberWithOptions(decimal: true), 
@@ -145,7 +163,7 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
               const SizedBox(height: 16),
               
               // Dropdown simulando os IDs da tabela 'categorias'
-              DropdownButtonFormField<int>(
+              DropdownButtonFormField<int>(  //
                 value: _categoriaId,
                 decoration: const InputDecoration(labelText: 'Categoria'),
                 items: const [
@@ -165,7 +183,7 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
                 value: _recorrente,
                 onChanged: (val) => setState(() => _recorrente = val),
               ),
-              Row(
+              Row( // Linha para os botões de imagem
                 
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
@@ -190,7 +208,9 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
               if (widget.post != null && widget.post!.imagem != null && _imagem == null)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
-                  child: Column(
+                  child: Column(  
+                    
+                         // Coluna para mostrar o título e a imagem existente
                     children: [
                       const Text('Imagem atual:', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
@@ -201,6 +221,46 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
                           print('DEBUG Flutter - Erro ao carregar imagem existente: ${widget.post!.imagem}');
                           return const Text('Erro ao carregar imagem');
                         },
+                      ),
+                       ListTile(
+                     title: const Text("Data do Registro", style: TextStyle(fontWeight: FontWeight.w500)),
+                      subtitle: Text("${_dataSelecionada.day}/${_dataSelecionada.month}/${_dataSelecionada.year}"),
+                      trailing: const Icon(Icons.calendar_month, color: Color(0xFF32794C)),
+                     onTap: () => _selecionarData(context),
+                   ),
+
+                  SwitchListTile(
+                    title: const Text('Gasto Recorrente?'),
+                    subtitle: const Text('Repetir este lançamento mensalmente'),
+                    value: _recorrente,
+                    activeColor: const Color(0xFF32794C),
+                    onChanged: (bool value) {
+                      setState(() => _recorrente = value);
+                    },
+                  ), 
+                  if (_recorrente)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.amber.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.amber),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.timer_outlined, color: Colors.orange),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  "Configurado: Este lançamento será marcado automaticamente no dia ${_dataSelecionada.day} de todos os meses.",
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),

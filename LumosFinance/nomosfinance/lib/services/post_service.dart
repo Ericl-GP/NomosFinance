@@ -88,7 +88,8 @@ Future<bool> savePost(Post post, {XFile? imagem}) async {
       request.fields['categoria_id'] = post.categoriaId.toString();
       request.fields['recorrente'] = post.recorrente ? '1' : '0';
 
-      // Imagem
+      // Formata a data para ISO 8601, que é o formato esperado pela API
+      request.fields['data'] = post.data.toIso8601String(); //
     
 
       print('DEBUG Flutter - Campos enviados: ${request.fields}');

@@ -1,135 +1,163 @@
 import 'package:flutter/material.dart';
-import '../data/post_model.dart';
 import 'package:flutter/gestures.dart';
+import 'package:reorderable_grid_view/reorderable_grid_view.dart';
+import 'package:table_calendar/table_calendar.dart';
+import '../data/post_model.dart';
 import '../services/auth_service.dart';
 import '../services/post_service.dart';
 import '../utils/constants.dart';
 import 'login_screen.dart';
 import 'post_form_screen.dart';
-import 'package:reorderable_grid_view/reorderable_grid_view.dart';
-import 'package:table_calendar/table_calendar.dart';
-
-
-
-// ==> A Home é a tela principal do app, onde o usuário verá o feed de gastos, os maiores gastos do mês e os comprovantes. Ela também tem um menu de navegação para acessar outras seções (que vamos criar depois) e um botão flutuante para adicionar novos gastos. <==
 
 class NomosFinance extends StatefulWidget {
-  
   const NomosFinance({Key? key}) : super(key: key);
-  
 
   @override
   State<NomosFinance> createState() => _NomosFinanceState();
 }
 
-class post {
-  final int id;
-  final String title;
-  final String content;
-  final double valor;
-  final int categoriaId;
-  final bool recorrente;
-  final String? imagem;
-
-  post({
-    required this.id,
-    required this.title,
-    required this.content,
-    required this.valor,
-    required this.categoriaId,
-    required this.recorrente,
-    this.imagem,
-  });
-
-
-
-  factory post.fromJson(Map<String, dynamic> json) {
-    return post(
-      id: json['id'],
-      title: json['title'],
-      content: json['content'],
-      valor: (json['valor'] as num).toDouble(),
-      categoriaId: json['categoria_id'],
-      recorrente: json['recorrente'],
-      imagem: json['imagem'], // Pode ser nulo
-    );
-  }
-}
-List<Post> getMaioresGastos(List<Post> todosOsPosts) {
-  // Cria uma cópia para não alterar a ordem da lista original do feed
-  List<Post> listaOrdenada = List.from(todosOsPosts);
-  
-  // Ordena do maior para o menor (b.compareTo(a))
-  listaOrdenada.sort((a, b) => b.valor.compareTo(a.valor));
-  
-  return listaOrdenada; // O índice 0 será sempre o maior gasto!
-}
-
 class _NomosFinanceState extends State<NomosFinance> {
   final PostService _postService = PostService();
   final AuthService _authService = AuthService();
+
+  int _currentIndex = 0;
+  int _refreshKey = 0;
+  bool _isLoading = false;
+  String _userName = 'Usuário';
+
+  // Estados de cache para persistência de ordem e filtros
   List<Post>? _comprovantesOrdenados;
-  List<Post>? _topGastosPersonalizados; 
+  List<Post>? _topGastosPersonalizados;
+
+  // Estados do controle de Calendário
   DateTime _focusedDay = DateTime.now();
-  DateTime? _selectedDay = DateTime.now();// <-- Adicione isso junto das outras variáveis
-  
-  int _selectedIndex = 0;
-  String _userName = "Carregando...";
-  bool _isLoading = true;
-  int _refreshKey = 0; // Chave para forçar refresh do FutureBuilder
+  DateTime? _selectedDay = DateTime.now();
 
   @override
   void initState() {
     super.initState();
-    _initialLoad();
+    _loadUserData();
   }
 
-  // Carrega os dados iniciais (Usuário e Posts)
-  Future<void> _initialLoad() async {
+  // Carrega o nome do usuário logado vindo do AuthService
+  Future<void> _loadUserData() async {
+    try {
+      final userName = await _authService.getUserName();
+      if (userName != null) {
+        setState(() {
+          _userName = userName;
+        });
+      }
+    } catch (e) {
+      print('Erro ao carregar dados do usuário: $e');
+    }
+  }
+
+  // Realiza o logout limpando os tokens e redirecionando para o Login
+  Future<void> _confirmLogout() async {
+    bool? confirmar = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Sair do App'),
+        content: const Text('Deseja realmente encerrar sua sessão no Nomos Finance?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sair', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmar == true) {
+      await _authService.logout();
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      }
+    }
+  }
+
+  // Executa a remoção do post e invalida o cache para forçar a atualização imediata
+  Future<void> _deletePost(Post post) async {
+    bool? confirmacao = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Excluir Registro'),
+        content: Text('Tem certeza que deseja apagar "${post.title}"? Esta ação não pode ser desfeita.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Excluir', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmacao != true) return;
+
     setState(() => _isLoading = true);
-    
-    // Pega o nome do usuário que foi salvo no SharedPreferences pelo AuthService
-    final name = await _authService.getUserName(); 
-    
-    setState(() {
-      _userName = name ?? "Usuário";
-      _isLoading = false;
-    });
+    final success = await _postService.deletePost(post.id!);
+    setState(() => _isLoading = false);
+
+    if (success && mounted) {
+      setState(() {
+        _comprovantesOrdenados = null; // Destrói o cache dos comprovantes
+        _topGastosPersonalizados = null; // Destrói o cache de maiores gastos
+        _refreshKey++; // Força rebuild do FutureBuilder
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registro excluído com sucesso!'), backgroundColor: Colors.green),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erro ao excluir o registro do banco.'), backgroundColor: Colors.red),
+      );
+    }
   }
 
-  void _onItemTapped(int index) {
-    setState(() => _selectedIndex = index);
+  // Organiza de forma decrescente estrita pelo valor matemático do Post
+  List<Post> _obterMaioresGastos(List<Post> todosOsPosts) {
+    List<Post> ordenada = todosOsPosts.where((p) => p.valor > 0).toList();
+    ordenada.sort((a, b) => b.valor.compareTo(a.valor));
+    return ordenada.take(5).toList();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-                // Adicione isso no final do Scaffold da home.dart
+      backgroundColor: const Color.fromARGB(255, 243, 224, 224),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color.fromARGB(255, 18, 168, 86), // Verde vibrante para destacar a ação de adicionar gasto
+        backgroundColor: const Color.fromARGB(255, 18, 168, 86),
         child: const Icon(Icons.add, color: Colors.white),
         onPressed: () async {
-          // Abre a tela de formulário
           final refresh = await Navigator.push(
             context,
             MaterialPageRoute(builder: (context) => const PostFormScreen()),
           );
-          
-          // Se o PostFormScreen retornou true (sucesso), recarrega a lista
           if (refresh == true) {
             setState(() {
-              _comprovantesOrdenados = null; // LIMPA O CACHE
-              _topGastosPersonalizados = null; // LIMPA O CACHE
-              _refreshKey++; 
+              _comprovantesOrdenados = null;
+              _topGastosPersonalizados = null;
+              _refreshKey++;
             });
-          };
+          }
         },
       ),
-      backgroundColor: const Color.fromARGB(255, 243, 224, 224), // Fundo branco semi-transparente para destacar os cards
       body: SafeArea(
         child: Column(
           children: [
-            // Header com Nome do Usuário Dinâmico
+            // Header Dinâmico do App
             Container(
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -137,12 +165,12 @@ class _NomosFinanceState extends State<NomosFinance> {
                 color: const Color.fromARGB(255, 65, 114, 248),
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: const [
-                        BoxShadow(
-                          color: Color.fromARGB(221, 0, 0, 0),
-                          blurRadius: 4,
-                          offset: Offset(4, 6),
-                        ),
-                      ],
+                  BoxShadow(
+                    color: Color.fromARGB(221, 0, 0, 0),
+                    blurRadius: 4,
+                    offset: Offset(4, 6),
+                  ),
+                ],
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -154,7 +182,7 @@ class _NomosFinanceState extends State<NomosFinance> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: const Color.fromARGB(198, 49, 179, 108), // Verde mais suave para o nome do usuário
+                      color: const Color.fromARGB(198, 49, 179, 108),
                       borderRadius: BorderRadius.circular(20),
                       boxShadow: const [
                         BoxShadow(
@@ -163,172 +191,119 @@ class _NomosFinanceState extends State<NomosFinance> {
                           offset: Offset(4, 6),
                         ),
                       ],
-                      
                     ),
                     child: Row(
                       children: [
-                        Text(_userName, style: const TextStyle(color: Color.fromARGB(179, 0, 0, 0), fontSize: 14)),
+                        Text(
+                          _userName,
+                          style: const TextStyle(color: Color.fromARGB(179, 0, 0, 0), fontSize: 14, fontWeight: FontWeight.w600),
+                        ),
                         const SizedBox(width: 8),
                         IconButton(
-                          icon: const Icon(Icons.logout, color: Colors.white70, size: 20),
+                          icon: const Icon(Icons.logout, color: Colors.white, size: 18),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
                           onPressed: _confirmLogout,
                         )
                       ],
                     ),
                   ),
-                  
                 ],
               ),
             ),
 
-            // Menu de Navegação Superior (conforme seu design)
-            
-              //Padding(
-                
-                //padding: const EdgeInsets.symmetric(horizontal: 16),
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 1),
-                  
-                  decoration: BoxDecoration(
-                    color: const Color.fromARGB(255, 65, 114, 248),
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: const [
-                  BoxShadow(
-                    color: Color.fromARGB(234, 0, 0, 0),
-                    blurRadius: 8,
-                    offset: Offset(4, 6),
-                  ),
-                ],
+            const Divider(color: Colors.black26, thickness: 2, indent: 16, endIndent: 16, height: 10),
 
-                  ),
-                  
-                  
-                  child: Row(
-                    
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    
-                    children: [
-                      
-                      _navButton('Início', 0),
-                      _navButton('Gastos', 1),
-                      _navButton('Comprovantes', 2),
-                    ],
-                  ),
-              ),
-
-            const Divider(color: Colors.black26, thickness: 2, indent: 16, endIndent: 16, height: 30), // Linha divisória entre o menu e o conteúdo
-
-            // Conteúdo usando FutureBuilder para os Posts
+            // Gerenciador de Conteúdo Principal Assíncrono
             Expanded(
               child: Container(
-                margin: (const EdgeInsets.symmetric(horizontal: 16, vertical: 16)),
-                padding: const EdgeInsets.all(16),
-                
+                margin: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: const Color.fromARGB(234, 23, 116, 255),
-                borderRadius: BorderRadius.circular(10),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color.fromARGB(199, 0, 0, 0),
-                    blurRadius: 8,
-                    offset: Offset(4, 4),
-                  ),
-                ],
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color.fromARGB(199, 0, 0, 0),
+                      blurRadius: 8,
+                      offset: Offset(4, 4),
+                    ),
+                  ],
+                ),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator(color: Colors.white))
+                    : FutureBuilder<List<Post>>(
+                        key: ValueKey(_refreshKey),
+                        future: _postService.getPosts(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator(color: Colors.white));
+                          } else if (snapshot.hasError) {
+                            return Center(child: Text('Erro: ${snapshot.error}', style: const TextStyle(color: Colors.white)));
+                          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                            return const Center(child: Text('Nenhum registro encontrado.', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)));
+                          }
+
+                          final posts = snapshot.data!;
+
+                          switch (_currentIndex) {
+                            case 0:
+                              return _buildInicio(posts);
+                            case 1:
+                              return _buildCalendario(posts);
+                            case 2:
+                              return _buildComprovantes(posts);
+                            default:
+                              return _buildInicio(posts);
+                          }
+                        },
+                      ),
               ),
-              
-              child: _isLoading 
-                ? const Center(child: CircularProgressIndicator())
-                : _buildPageContent(),
             ),
-            //Expanded(
-            //  child: _isLoading 
-            //    ? const Center(child: CircularProgressIndicator())
-            //    : _buildPageContent(),
-            //),
-        ),
           ],
         ),
       ),
-      
-    );
-  }
-
-  // Lógica de Logout igual ao post_list_screen
-  void _confirmLogout() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sair?'),
-        content: const Text('Deseja realmente encerrar a sessão?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Não')),
-          TextButton(
-            onPressed: () async {
-              await _authService.logout();
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
-                (route) => false,
-              );
-            },
-            child: const Text('Sim', style: TextStyle(color: Colors.red)),
-          ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+          });
+        },
+        selectedItemColor: const Color(0xFF32794C),
+        unselectedItemColor: Colors.grey,
+        backgroundColor: Colors.white,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Início'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendário'),
+          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Comprovantes'),
         ],
       ),
     );
   }
 
-  Widget _buildPageContent() {
-    return FutureBuilder<List<Post>>(
-      
-      key: ValueKey(_refreshKey), // Chave para forçar refresh
-      future: _postService.getPosts(), // Chama o PostController@index do Laravel
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Center(child: Text("Nenhum post encontrado."));
-        }
+  // ABA 1: Visão Geral com Rolagem do Histórico Independente do Carrossel de Maiores Gastos
+  Widget _buildInicio(List<Post> posts) {
+    final historicoRecentes = posts.reversed.toList();
+    _topGastosPersonalizados ??= _obterMaioresGastos(posts);
 
-        final posts = snapshot.data!;
-
-        if (_selectedIndex == 0) return _buildInicio(posts);
-        if (_selectedIndex == 1) return _buildGastos(posts);
-        return _buildComprovantes(posts);
-      },
-    );
-  }
-
- Widget _buildInicio(List<Post> posts) {
-    // Histórico de adicionados (Invertido para mostrar os mais novos primeiro)
-    final historicoRecentes = posts.reversed.toList(); 
-
-    // Filtra e ordena os maiores gastos (Sempre automático por valor, sem reordenar com a mão)
-    final postsValidos = posts.where((p) => p.valor > 0).toList(); 
-    final maioresGastos = getMaioresGastos(postsValidos).take(5).toList();
-
-    // ScrollConfiguration ativa o clique e arrasto do mouse para as listas internas
     return ScrollConfiguration(
       behavior: MyCustomScrollBehavior(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // =======================================================
-          // SEÇÃO 1: HISTÓRICO DE POSTS (Rolagem Independente)
-          // =======================================================
           const Padding(
-            padding: EdgeInsets.only(left: 16.0, top: 16.0, right: 16.0),
+            padding: EdgeInsets.only(left: 8.0, top: 4.0, bottom: 8.0),
             child: Text(
               'Últimos Adicionados',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.black87),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
             ),
           ),
-          const SizedBox(height: 10),
           
-          // O Expanded cria a separação! O histórico rola aqui dentro e não mexe o resto da tela
+          // Histórico rola de forma isolada aqui dentro sem arrastar os Maiores Gastos junto
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: historicoRecentes.length,
               itemBuilder: (context, index) {
                 return _longCard(historicoRecentes[index], const Color.fromARGB(255, 85, 87, 102));
@@ -336,108 +311,342 @@ class _NomosFinanceState extends State<NomosFinance> {
             ),
           ),
 
-          // =======================================================
-          // DIVISOR / SEPARAÇÃO ENTRE AS SEÇÕES
-          // =======================================================
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Divider(color: Colors.black26, thickness: 1),
-                SizedBox(height: 8),
-                Text(
-                  'Maiores Gastos do Mês (Comprovantes)',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-              ],
+            padding: EdgeInsets.symmetric(vertical: 8.0),
+            child: Divider(color: Colors.white38, thickness: 1),
+          ),
+
+          const Padding(
+            padding: EdgeInsets.only(left: 8.0, bottom: 8.0),
+            child: Text(
+              'Maiores Gastos do Mês',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
             ),
           ),
 
-          // =======================================================
-          // SEÇÃO 2: MAIORES GASTOS (Fixo embaixo, rola só para o lado)
-          // =======================================================
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16.0, left: 16.0, right: 16.0),
-            child: SizedBox(
-              height: 140, // Altura fixa para o carrossel horizontal
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: maioresGastos.length,
-                itemBuilder: (context, index) {
-                  final itemPost = maioresGastos[index];
-                  
-                  // Mantém a lógica de cor (O maior valor absoluto fica em destaque vermelho)
-                  final cardColor = index == 0 ? Colors.red[400]! : Colors.orange[400]!;
+          // Seção inferior fixa de Maiores Gastos (Ordem automática de valores por ListView comum)
+          SizedBox(
+            height: 100,
+            child: _topGastosPersonalizados!.isEmpty
+                ? const Center(child: Text('Nenhum gasto registrado.', style: TextStyle(color: Colors.white70)))
+                : ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: _topGastosPersonalizados!.length,
+                    itemBuilder: (context, index) {
+                      final itemGasto = _topGastosPersonalizados![index];
+                      final cardColor = index == 0 ? Colors.red[400]! : Colors.orange[400]!;
 
-                  return _squareCard(
-                    title: itemPost.title,
-                    valor: itemPost.valor,
-                    color: cardColor,
-                    size: 110,
-                  );
-                },
-              ),
-            ),
+                      return _squareCard(
+                        title: itemGasto.title,
+                        valor: itemGasto.valor,
+                        color: cardColor,
+                      );
+                    },
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildGastos(List<Post> posts) {
-    
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: posts.length,
-      itemBuilder: (context, index) {
-        final post = posts[index];
-        return _longCard(post, const Color.fromARGB(255, 82, 67, 55));
+  // ABA 2: Calendário Financeiro com Lógica de Agendamento e Recorrência Mensal
+  Widget _buildCalendario(List<Post> posts) {
+    final notasDoDia = posts.where((post) {
+      // Comparação direta de dia, mês e ano para posts normais
+      bool mesmoDiaComum = post.data.year == _selectedDay?.year &&
+          post.data.month == _selectedDay?.month &&
+          post.data.day == _selectedDay?.day;
+
+      // Se for recorrente, verifica o casamento do dia e impede exibição em meses anteriores à criação
+      bool recorrenciaMensal = post.recorrente &&
+          post.data.day == _selectedDay?.day &&
+          _selectedDay!.isAfter(post.data.subtract(const Duration(days: 1)));
+
+      return mesmoDiaComum || recorrenciaMensal;
+    }).toList();
+
+    return Column(
+      children: [
+        TableCalendar(
+          firstDay: DateTime.utc(2020, 1, 1),
+          lastDay: DateTime.utc(2030, 12, 31),
+          focusedDay: _focusedDay,
+          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+          onDaySelected: (selectedDay, focusedDay) {
+            setState(() {
+              _selectedDay = selectedDay;
+              _focusedDay = focusedDay;
+            });
+          },
+          eventLoader: (day) {
+            return posts.where((post) {
+              return (post.data.year == day.year && post.data.month == day.month && post.data.day == day.day) ||
+                     (post.recorrente && post.data.day == day.day && day.isAfter(post.data.subtract(const Duration(days: 1))));
+            }).toList();
+          },
+          daysOfWeekStyle: const DaysOfWeekStyle(
+            weekdayStyle: TextStyle(color: Colors.white),
+            weekendStyle: TextStyle(color: Colors.orangeAccent),
+          ),
+          calendarStyle: const CalendarStyle(
+            defaultTextStyle: TextStyle(color: Colors.white),
+            weekendTextStyle: TextStyle(color: Colors.orangeAccent),
+            outsideDaysVisible: false,
+            selectedDecoration: BoxDecoration(
+              color: Color(0xFF32794C),
+              shape: BoxShape.circle,
+            ),
+            todayDecoration: BoxDecoration(
+              color: Colors.blueGrey,
+              shape: BoxShape.circle,
+            ),
+            markerDecoration: BoxDecoration(
+              color: Colors.amber,
+              shape: BoxShape.circle,
+            ),
+            markersMaxCount: 1,
+          ),
+          headerStyle: const HeaderStyle(
+            formatButtonVisible: false,
+            titleCentered: true,
+            titleTextStyle: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            leftChevronIcon: Icon(Icons.chevron_left, color: Colors.white),
+            rightChevronIcon: Icon(Icons.chevron_right, color: Colors.white),
+          ),
+        ),
+        const Divider(color: Colors.white38, height: 20, thickness: 1),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Lançamentos do Dia: ${_selectedDay!.day}/${_selectedDay!.month}',
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+              ),
+              Text(
+                '${notasDoDia.length} encontrados',
+                style: const TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: notasDoDia.isEmpty
+              ? const Center(child: Text('Nenhum registro para este dia.', style: TextStyle(color: Colors.white70)))
+              : ListView.builder(
+                  itemCount: notasDoDia.length,
+                  itemBuilder: (context, index) {
+                    final item = notasDoDia[index];
+                    return Card(
+                      color: const Color.fromARGB(255, 50, 80, 180),
+                      elevation: 1,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: Icon(
+                          item.recorrente ? Icons.autorenew : Icons.label_important_outline,
+                          color: Colors.amber,
+                        ),
+                        title: Text(item.title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                        subtitle: Text('R\$ ${item.valor.toStringAsFixed(2)}', style: const TextStyle(color: Colors.white70)),
+                        trailing: const Icon(Icons.keyboard_arrow_right, color: Colors.white70),
+                        onTap: () => _abrirDescricaoModal(item),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  // ABA 3: Galeria Reordenável por Arrastar (Drag and Drop) para os Comprovantes
+  Widget _buildComprovantes(List<Post> posts) {
+    if (_comprovantesOrdenados == null) {
+      var filtrados = posts.where((p) => p.imagem != null).toList();
+      filtrados.sort((a, b) => b.data.compareTo(a.data)); // Ordenação cronológica inicial
+      _comprovantesOrdenados = filtrados;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(4),
+      child: _comprovantesOrdenados!.isEmpty
+          ? const Center(child: Text('Nenhum comprovante anexado.', style: TextStyle(color: Colors.white70)))
+          : ReorderableGridView.builder(
+              itemCount: _comprovantesOrdenados!.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 8,
+                mainAxisSpacing: 8,
+                childAspectRatio: 0.85,
+              ),
+              onReorder: (oldIndex, newIndex) {
+                setState(() {
+                  final element = _comprovantesOrdenados!.removeAt(oldIndex);
+                  _comprovantesOrdenados!.insert(newIndex, element);
+                });
+              },
+              itemBuilder: (context, index) {
+                final postItem = _comprovantesOrdenados![index];
+                return _comprovanteCard(
+                  postItem,
+                  key: ValueKey(postItem.id),
+                );
+              },
+            ),
+    );
+  }
+
+  // Exibe a folha modal inferior com as anotações e descrição completas do Post
+  void _abrirDescricaoModal(Post post) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(post.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  if (post.recorrente)
+                    const Chip(
+                      label: Text("Recorrência Mensal", style: TextStyle(color: Colors.white, fontSize: 12)),
+                      backgroundColor: Colors.orange,
+                    )
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                "Valor: R\$ ${post.valor.toStringAsFixed(2)}",
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.redAccent),
+              ),
+              const Divider(height: 24),
+              const Text("Descrição / Anotações:", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
+              Text(
+                post.content.isNotEmpty ? post.content : "Nenhuma anotação vinculada a este registro.",
+                style: const TextStyle(fontSize: 15, height: 1.3, color: Colors.black87),
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
       },
     );
   }
 
-// Para a aba de Comprovantes, vamos usar um GridView para mostrar os posts como "comprovantes"
- Widget _buildComprovantes(List<Post> posts) {
-    if (_comprovantesOrdenados == null) {
-      // 1. Filtra os posts com imagem
-      var filtrados = posts.where((p) => p.imagem != null).toList();
-      // 2. SISTEMA DE HISTÓRICO: Ordena por data decrescente (mais recentes primeiro)
-      filtrados.sort((a, b) => b.data.compareTo(a.data));
-      _comprovantesOrdenados = filtrados;
-    }
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: ReorderableGridView.builder(
-        itemCount: _comprovantesOrdenados!.length,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 10,
-          mainAxisSpacing: 10,
-          childAspectRatio: 0.8,
-        ),
-        // Função que reorganiza os itens ao soltar o clique
-        onReorder: (oldIndex, newIndex) {
-          setState(() {
-            final element = _comprovantesOrdenados!.removeAt(oldIndex);
-            _comprovantesOrdenados!.insert(newIndex, element);
-          });
-        },
-        itemBuilder: (context, index) {
-          final postItem = _comprovantesOrdenados![index];
-          return _comprovanteCard(
-            postItem, 
-            key: ValueKey(postItem.id), // Chave obrigatória para o drag and drop funcionar
-          );
-        },
+  // Renderizador do Card do Histórico Geral (Vertical)
+  Widget _longCard(Post post, Color color) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(post.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                const SizedBox(height: 4),
+                Text(
+                  post.content,
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Row(
+            children: [
+              Text(
+                'R\$ ${post.valor.toStringAsFixed(2)}',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                icon: const Icon(Icons.edit, color: Colors.white70, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () async {
+                  final refresh = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => PostFormScreen(post: post)),
+                  );
+                  if (refresh == true && mounted) {
+                    setState(() {
+                      _comprovantesOrdenados = null;
+                      _topGastosPersonalizados = null;
+                      _refreshKey++;
+                    });
+                  }
+                },
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                icon: const Icon(Icons.delete, color: Colors.redAccent, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () => _deletePost(post),
+              ),
+            ],
+          )
+        ],
       ),
     );
   }
 
-  // Adicionamos a {Key? key} para o Container saber qual card está a ser movido
+  // Renderizador do Card dos Maiores Gastos (Horizontal)
+  Widget _squareCard({required String title, required double valor, required Color color}) {
+    return Container(
+      width: 120,
+      margin: const EdgeInsets.only(right: 8, bottom: 4),
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(10),
+        boxShadow: const [
+          BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+        ],
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'R\$ ${valor.toStringAsFixed(0)}',
+            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Renderizador do Card de Imagem para a Grade de Comprovantes
   Widget _comprovanteCard(Post post, {Key? key}) {
     return Container(
-      key: key, // <-- Passamos a chave para o Container principal do card
+      key: key,
       decoration: BoxDecoration(
         color: const Color.fromARGB(255, 0, 200, 135),
         borderRadius: BorderRadius.circular(8),
@@ -455,14 +664,16 @@ class _NomosFinanceState extends State<NomosFinance> {
                             '${ApiConstants.storageBaseUrl}/storage/${post.imagem}',
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) {
-                              print('DEBUG Flutter - Erro ao carregar imagem: ${post.imagem}, erro: $error');
                               return Container(
                                 color: Colors.black26,
+                                padding: const EdgeInsets.all(4),
                                 child: Center(
                                   child: Text(
                                     post.title,
-                                    style: const TextStyle(color: Colors.white),
+                                    style: const TextStyle(color: Colors.white, fontSize: 12),
                                     textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                               );
@@ -470,11 +681,14 @@ class _NomosFinanceState extends State<NomosFinance> {
                           )
                         : Container(
                             color: Colors.black26,
+                            padding: const EdgeInsets.all(4),
                             child: Center(
                               child: Text(
                                 post.title,
-                                style: const TextStyle(color: Colors.white),
+                                style: const TextStyle(color: Colors.white, fontSize: 12),
                                 textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
                           ),
@@ -486,13 +700,11 @@ class _NomosFinanceState extends State<NomosFinance> {
                   child: Row(
                     children: [
                       Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
+                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
                         child: IconButton(
-                          icon: const Icon(Icons.edit, color: Colors.white, size: 18),
-                          padding: const EdgeInsets.all(6),
+                          icon: const Icon(Icons.edit, color: Colors.white, size: 16),
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(),
                           onPressed: () async {
                             final refresh = await Navigator.push(
                               context,
@@ -500,7 +712,8 @@ class _NomosFinanceState extends State<NomosFinance> {
                             );
                             if (refresh == true && mounted) {
                               setState(() {
-                                _comprovantesOrdenados = null; // Reseta a lista para recarregar os dados novos do Laravel
+                                _comprovantesOrdenados = null;
+                                _topGastosPersonalizados = null;
                                 _refreshKey++;
                               });
                             }
@@ -509,18 +722,12 @@ class _NomosFinanceState extends State<NomosFinance> {
                       ),
                       const SizedBox(width: 4),
                       Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
+                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
                         child: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.white, size: 18),
-                          padding: const EdgeInsets.all(6),
-                          onPressed: () {
-                            _confirmDelete(post);
-                            // Dica: Se a eliminação no _confirmDelete der sucesso,
-                            // lembre-se de colocar _comprovantesOrdenados = null lá dentro também!
-                          },
+                          icon: const Icon(Icons.delete, color: Colors.white, size: 16),
+                          padding: const EdgeInsets.all(4),
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _deletePost(post),
                         ),
                       ),
                     ],
@@ -533,317 +740,12 @@ class _NomosFinanceState extends State<NomosFinance> {
       ),
     );
   }
-  void _confirmDelete(Post post) {
-    _comprovantesOrdenados = null; // Reseta a lista para recarregar os dados novos do Laravel
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Excluir post?'),
-        content: const Text('Deseja realmente excluir este post?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Não')),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _deletePost(post);
-            },
-            child: const Text('Sim', style: TextStyle(color: Colors.red)
-            ),
-            
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _deletePost(Post post) async {
-    final success = await _postService.deletePost(post.id!);
-    if (success && mounted) {
-      setState(() => _refreshKey++);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erro ao excluir o post.')),
-      );
-    }
-  }
-
-  Widget _navButton(String label, int index) {
-    final isSelected = _selectedIndex == index;
-    return GestureDetector(
-      onTap: () => _onItemTapped(index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.lightGreenAccent.withOpacity(0.5) : Colors.transparent,
-          borderRadius: BorderRadius.circular(15),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            color: isSelected ? Colors.black : Colors.white,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _longCard(Post post, Color color) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      height: 60,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(10),
-        boxShadow: const [
-          BoxShadow(
-            color: Color.fromARGB(214, 0, 0, 0),
-            blurRadius: 4,
-            offset: Offset(4, 6),
-      ),
-        ],
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      child: Row(
-        children: [
-          const CircleAvatar(radius: 14, backgroundColor: Color.fromARGB(122, 139, 137, 137)),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              post.title,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.edit, color: Colors.white70, size: 20),
-            onPressed: () async {
-              final refresh = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => PostFormScreen(post: post)),
-              );
-              if (refresh == true && mounted) {
-                setState(() => _refreshKey++); // Incrementa chave para forçar refresh
-              }
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete, color: Colors.white70, size: 20),
-            onPressed: () => _confirmDelete(post),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _squareCard(
-  {
-  Key? key,
-  required String title,
-  required double valor,
-  required Color color,
-  required double size,}
-  ) {
-
-   
-    
-  return Container(
-
-    key: key, // <-- ADICIONADO AQUI
-    width: size,
-    height: size + 20,
-    padding: const EdgeInsets.all(12), // Dá um respiro interno
-    margin: const EdgeInsets.only(right: 12), // Espaçamento entre os cards
-    decoration: BoxDecoration(
-      color: color,
-      borderRadius: BorderRadius.circular(12), // Bordas um pouco mais arredondadas
-      boxShadow: const [
-        BoxShadow(
-          color: Color.fromARGB(178, 0, 0, 0),
-          blurRadius: 6,
-          offset: Offset(0, 3), // Sombreado leve estilo financeiro
-        ),
-      ],
-    ),
-    child: Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // Título do Gasto (Ex: "Aluguel")
-        Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white70, // Branco mais suave
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis, // Coloca "..." se o nome for grande
-        ),
-        const SizedBox(height: 8),
-        // Valor do Gasto (Ex: "R$ 1500.00")
-        Text(
-          'R\$ ${valor.toStringAsFixed(2)}', // Formata com 2 casas decimais
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
-    ),
-  );
 }
 
-Widget _buildCalendario(List<Post> posts) {
-    // Filtra apenas os posts/anotações criados no dia selecionado no calendário
-    final notasDoDia = posts.where((post) {
-      return post.data.year == _selectedDay?.year &&
-             post.data.month == _selectedDay?.month &&
-             post.data.day == _selectedDay?.day;
-    }).toList();
-
-    return Column(
-      children: [
-        // Componente do Calendário Personalizado
-        TableCalendar(
-          firstDay: DateTime.utc(2020, 1, 1),
-          lastDay: DateTime.utc(2030, 12, 31),
-          focusedDay: _focusedDay,
-          selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-          onDaySelected: (selectedDay, focusedDay) {
-            setState(() {
-              _selectedDay = selectedDay;
-              _focusedDay = focusedDay; // Atualiza o foco do mês
-            });
-          },
-          calendarStyle: const CalendarStyle(
-            selectedDecoration: BoxDecoration(
-              color: Color(0xFF2563EB), // Azul do app
-              shape: BoxShape.circle,
-            ),
-            todayDecoration: BoxDecoration(
-              color: Colors.blueGrey,
-              shape: BoxShape.circle,
-            ),
-          ),
-          headerStyle: const HeaderStyle(
-            formatButtonVisible: false, // Esconde o botão de mudar formato de semana/mês
-            titleCentered: true,
-          ),
-        ),
-        
-        const Divider(height: 20, thickness: 1),
-        
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Anotações do Dia: ${_selectedDay!.day}/${_selectedDay!.month}',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-              // Indicador visual de quantidade
-              Chip(
-                label: Text('${notasDoDia.length}'),
-                backgroundColor: const Color(0xFF2EC4B6).withOpacity(0.2),
-              ),
-            ],
-          ),
-        ),
-        
-        // Lista de Notas do dia selecionado
-        Expanded(
-          child: notasDoDia.isEmpty
-              ? const Center(child: Text('Nenhuma anotação para este dia.'))
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: notasDoDia.length,
-                  itemBuilder: (context, index) {
-                    final nota = notasDoDia[index];
-                    return Card(
-                      elevation: 2,
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: ListTile(
-                        leading: const Icon(Icons.note_alt, color: Color(0xFF2EC4B6)),
-                        title: Text(
-                          nota.title,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: Text(
-                          nota.content,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                        // REQUISITO: Ao clicar, exibe a descrição completa
-                        onTap: () => _mostrarDescricaoNota(nota),
-                      ),
-                    );
-                  },
-                ),
-        ),
-      ],
-    );
-  }
-
-  // Janela modal para ler os detalhes da anotação
-  void _mostrarDescricaoNota(Post post) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    post.title,
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  Text(
-                    'R\$ ${post.valor.toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.red),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Data: ${post.data.day}/${post.data.month}/${post.data.year}',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              const Divider(height: 30),
-              const Text(
-                'Descrição / Anotação:',
-                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14, color: Colors.black54),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                post.content,
-                style: const TextStyle(fontSize: 16, height: 1.4),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-// Coloque no final do arquivo
 class MyCustomScrollBehavior extends MaterialScrollBehavior {
   @override
   Set<PointerDeviceKind> get dragDevices => {
         PointerDeviceKind.touch,
-        PointerDeviceKind.mouse, // Permite arrastar com clique do mouse
-        PointerDeviceKind.trackpad,
+        PointerDeviceKind.mouse,
       };
 }

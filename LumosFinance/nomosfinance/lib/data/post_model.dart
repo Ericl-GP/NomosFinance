@@ -6,7 +6,7 @@ class Post {
   final int categoriaId;
   final bool recorrente;
   final String? imagem;
-  final DateTime data; // <-- NOVO ATRIBUTO
+  final DateTime data; // Campo de data obrigatório
 
   Post({
     this.id,
@@ -16,7 +16,7 @@ class Post {
     required this.categoriaId,
     this.recorrente = false,
     this.imagem,
-    required this.data, // <-- REQUERIDO
+    required this.data,
   });
 
   factory Post.fromJson(Map<String, dynamic> json) {
@@ -28,7 +28,6 @@ class Post {
       categoriaId: json['categoria_id'] ?? 1,
       recorrente: json['recorrente'] == 1 || json['recorrente'] == true,
       imagem: json['imagem'] as String?,
-      // Converte a String de data vinda do Laravel para o objeto DateTime do Flutter
       data: json['data'] != null ? DateTime.parse(json['data']) : DateTime.now(),
     );
   }
@@ -42,7 +41,7 @@ class Post {
       'categoria_id': categoriaId,
       'recorrente': recorrente ? 1 : 0,
       if (imagem != null) 'imagem': imagem,
-      'data': data.toIso8601String(), // Envia para o Laravel no formato correto
+      'data': data.toIso8601String(),
     };
   }
 }
