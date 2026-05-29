@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../data/post_model.dart';
 import '../services/post_service.dart';
 import '../utils/constants.dart';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import '../services/notification_service.dart';
@@ -28,6 +28,7 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
   final _contentController = TextEditingController();
   final _valorController = TextEditingController();
   XFile? _imagem;
+  Uint8List? _imagemBytes;
   final ImagePicker _picker = ImagePicker();
   
   DateTime _dataSelecionada = DateTime.now();
@@ -199,9 +200,9 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
               if (_imagem != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
-                  child: kIsWeb 
-                      ? Image.network(_imagem!.path, height: 150) 
-                      : Image.file(File(_imagem!.path), height: 150),
+                  child: _imagemBytes != null
+                      ? Image.memory(_imagemBytes!, height: 150)
+                      : const SizedBox.shrink(),
                 ),
               // Mostrar imagem existente se estiver editando
               if (widget.post != null && widget.post!.imagem != null && _imagem == null)
@@ -281,11 +282,13 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
       ),
     );
   }
-   Future<void> _tirarFoto() async {// Função para tirar foto usando a câmera
+  Future<void> _tirarFoto() async {// Função para tirar foto usando a câmera
   final foto = await _picker.pickImage(source: ImageSource.camera);
   if (foto != null) {
+    final bytes = await foto.readAsBytes();
     setState(() {
-      _imagem = XFile(foto.path);
+      _imagem = foto;
+      _imagemBytes = bytes;
     });
   }
 
@@ -293,8 +296,10 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
 Future<void> _selecionarImagem() async {// Função para selecionar imagem da galeria
   final img = await _picker.pickImage(source: ImageSource.gallery);
   if (img != null) {
+    final bytes = await img.readAsBytes();
     setState(() {
-      _imagem = XFile(img.path);
+      _imagem = img;
+      _imagemBytes = bytes;
     });
   }
 }
