@@ -7,7 +7,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/services.dart';
 import '../services/notification_service.dart';
 import 'dart:math'; // Adicione para gerar números aleatórios
-import '../services/notification_service.dart'; // Adicione para chamar a notificação
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 
@@ -81,7 +80,7 @@ class _PostFormScreenState extends State<PostFormScreen> { // Aqui é onde a má
       recorrente: _recorrente,
       data: DateTime.now(), // Define a data atual para o post
 );
-    if (novoPost.valor == null || novoPost.valor <= 0) {
+    if (novoPost.valor <= 0) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Por favor, insira um valor numérico válido.'),

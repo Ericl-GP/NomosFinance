@@ -39,13 +39,12 @@ class _NomosFinanceState extends State<NomosFinance> {
     _loadUserData();
   }
 
-  // Carrega o nome do usuário logado vindo do AuthService
   Future<void> _loadUserData() async {
     try {
-      final userName = await _authService.getUserName();
-      if (userName != null) {
+      final name = await _authService.getUserName();
+      if (name != null && name.isNotEmpty) {
         setState(() {
-          _userName = userName;
+          _userName = name;
         });
       }
     } catch (e) {
@@ -53,7 +52,6 @@ class _NomosFinanceState extends State<NomosFinance> {
     }
   }
 
-  // Realiza o logout limpando os tokens e redirecionando para o Login
   Future<void> _confirmLogout() async {
     bool? confirmar = await showDialog<bool>(
       context: context,
@@ -84,7 +82,6 @@ class _NomosFinanceState extends State<NomosFinance> {
     }
   }
 
-  // Executa a remoção do post e invalida o cache para forçar a atualização imediata
   Future<void> _deletePost(Post post) async {
     bool? confirmacao = await showDialog<bool>(
       context: context,
@@ -112,9 +109,9 @@ class _NomosFinanceState extends State<NomosFinance> {
 
     if (success && mounted) {
       setState(() {
-        _comprovantesOrdenados = null; // Destrói o cache dos comprovantes
-        _topGastosPersonalizados = null; // Destrói o cache de maiores gastos
-        _refreshKey++; // Força rebuild do FutureBuilder
+        _comprovantesOrdenados = null;
+        _topGastosPersonalizados = null;
+        _refreshKey++;
       });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Registro excluído com sucesso!'), backgroundColor: Colors.green),
@@ -126,7 +123,6 @@ class _NomosFinanceState extends State<NomosFinance> {
     }
   }
 
-  // Organiza de forma decrescente estrita pelo valor matemático do Post
   List<Post> _obterMaioresGastos(List<Post> todosOsPosts) {
     List<Post> ordenada = todosOsPosts.where((p) => p.valor > 0).toList();
     ordenada.sort((a, b) => b.valor.compareTo(a.valor));
@@ -157,7 +153,6 @@ class _NomosFinanceState extends State<NomosFinance> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header Dinâmico do App
             Container(
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -214,7 +209,6 @@ class _NomosFinanceState extends State<NomosFinance> {
 
             const Divider(color: Colors.black26, thickness: 2, indent: 16, endIndent: 16, height: 10),
 
-            // Gerenciador de Conteúdo Principal Assíncrono
             Expanded(
               child: Container(
                 margin: const EdgeInsets.all(16),
@@ -250,8 +244,10 @@ class _NomosFinanceState extends State<NomosFinance> {
                             case 0:
                               return _buildInicio(posts);
                             case 1:
-                              return _buildCalendario(posts);
+                              return _buildExtrato(posts);
                             case 2:
+                              return _buildCalendario(posts);
+                            case 3:
                               return _buildComprovantes(posts);
                             default:
                               return _buildInicio(posts);
@@ -276,6 +272,7 @@ class _NomosFinanceState extends State<NomosFinance> {
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Início'),
+          BottomNavigationBarItem(icon: Icon(Icons.analytics_outlined), label: 'Extrato'),
           BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: 'Calendário'),
           BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Comprovantes'),
         ],
@@ -283,7 +280,7 @@ class _NomosFinanceState extends State<NomosFinance> {
     );
   }
 
-  // ABA 1: Visão Geral com Rolagem do Histórico Independente do Carrossel de Maiores Gastos
+  // ABA 1: Visão Geral com Rolagem Independente
   Widget _buildInicio(List<Post> posts) {
     final historicoRecentes = posts.reversed.toList();
     _topGastosPersonalizados ??= _obterMaioresGastos(posts);
@@ -300,8 +297,6 @@ class _NomosFinanceState extends State<NomosFinance> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
             ),
           ),
-          
-          // Histórico rola de forma isolada aqui dentro sem arrastar os Maiores Gastos junto
           Expanded(
             child: ListView.builder(
               itemCount: historicoRecentes.length,
@@ -310,12 +305,10 @@ class _NomosFinanceState extends State<NomosFinance> {
               },
             ),
           ),
-
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8.0),
             child: Divider(color: Colors.white38, thickness: 1),
           ),
-
           const Padding(
             padding: EdgeInsets.only(left: 8.0, bottom: 8.0),
             child: Text(
@@ -323,8 +316,6 @@ class _NomosFinanceState extends State<NomosFinance> {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
             ),
           ),
-
-          // Seção inferior fixa de Maiores Gastos (Ordem automática de valores por ListView comum)
           SizedBox(
             height: 100,
             child: _topGastosPersonalizados!.isEmpty
@@ -349,15 +340,100 @@ class _NomosFinanceState extends State<NomosFinance> {
     );
   }
 
-  // ABA 2: Calendário Financeiro com Lógica de Agendamento e Recorrência Mensal
+  // ABA 2: Novo Módulo de Extrato com Somatório Mensal Dedicado
+  Widget _buildExtrato(List<Post> posts) {
+    final agora = DateTime.now();
+    final postsDoMes = posts.where((p) => p.data.month == agora.month && p.data.year == agora.year).toList();
+    
+    postsDoMes.sort((a, b) => b.data.compareTo(a.data));
+
+    final double totalGasto = postsDoMes.fold(0.0, (sum, item) => sum + item.valor);
+
+    const meses = [
+      '', 'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    final nomeMes = meses[agora.month];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color.fromARGB(255, 50, 80, 180),
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: const [
+              BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text(
+                'Total Acumulado em $nomeMes',
+                style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'R\$ ${totalGasto.toStringAsFixed(2)}',
+                style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        const Padding(
+          padding: EdgeInsets.only(left: 4.0, bottom: 8.0),
+          child: Text(
+            'Detalhamento Cronológico',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+          ),
+        ),
+        Expanded(
+          child: postsDoMes.isEmpty
+              ? const Center(child: Text('Nenhum lançamento efetuado este mês.', style: TextStyle(color: Colors.white70)))
+              : ListView.builder(
+                  itemCount: postsDoMes.length,
+                  itemBuilder: (context, index) {
+                    final item = postsDoMes[index];
+                    final String diaMeseFormatado = "${item.data.day.toString().padLeft(2, '0')}/${item.data.month.toString().padLeft(2, '0')}";
+                    return Card(
+                      color: const Color.fromARGB(255, 85, 87, 102),
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: ListTile(
+                        leading: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(6)),
+                          child: Text(
+                            diaMeseFormatado,
+                            style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        title: Text(item.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        subtitle: Text(item.content, style: const TextStyle(color: Colors.white70), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        trailing: Text(
+                          'R\$ ${item.valor.toStringAsFixed(2)}',
+                          style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        onTap: () => _abrirDescricaoModal(item),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+  }
+
+  // ABA 3: Calendário Financeiro
   Widget _buildCalendario(List<Post> posts) {
     final notasDoDia = posts.where((post) {
-      // Comparação direta de dia, mês e ano para posts normais
       bool mesmoDiaComum = post.data.year == _selectedDay?.year &&
           post.data.month == _selectedDay?.month &&
           post.data.day == _selectedDay?.day;
 
-      // Se for recorrente, verifica o casamento do dia e impede exibição em meses anteriores à criação
       bool recorrenciaMensal = post.recorrente &&
           post.data.day == _selectedDay?.day &&
           _selectedDay!.isAfter(post.data.subtract(const Duration(days: 1)));
@@ -460,11 +536,11 @@ class _NomosFinanceState extends State<NomosFinance> {
     );
   }
 
-  // ABA 3: Galeria Reordenável por Arrastar (Drag and Drop) para os Comprovantes
+  // ABA 4: Galeria Reordenável por Arrastar
   Widget _buildComprovantes(List<Post> posts) {
     if (_comprovantesOrdenados == null) {
       var filtrados = posts.where((p) => p.imagem != null).toList();
-      filtrados.sort((a, b) => b.data.compareTo(a.data)); // Ordenação cronológica inicial
+      filtrados.sort((a, b) => b.data.compareTo(a.data));
       _comprovantesOrdenados = filtrados;
     }
 
@@ -497,7 +573,6 @@ class _NomosFinanceState extends State<NomosFinance> {
     );
   }
 
-  // Exibe a folha modal inferior com as anotações e descrição completas do Post
   void _abrirDescricaoModal(Post post) {
     showModalBottomSheet(
       context: context,
@@ -517,7 +592,7 @@ class _NomosFinanceState extends State<NomosFinance> {
                   Text(post.title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                   if (post.recorrente)
                     const Chip(
-                      label: Text("Recorrência Mensal", style: TextStyle(color: Colors.white, fontSize: 12)),
+                      label: const Text("Recorrência Mensal", style: TextStyle(color: Colors.white, fontSize: 12)),
                       backgroundColor: Colors.orange,
                     )
                 ],
@@ -542,8 +617,8 @@ class _NomosFinanceState extends State<NomosFinance> {
     );
   }
 
-  // Renderizador do Card do Histórico Geral (Vertical)
   Widget _longCard(Post post, Color color) {
+    final String dataFormatada = "${post.data.day.toString().padLeft(2, '0')}/${post.data.month.toString().padLeft(2, '0')}/${post.data.year}";
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
       padding: const EdgeInsets.all(12),
@@ -558,7 +633,17 @@ class _NomosFinanceState extends State<NomosFinance> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(post.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text(post.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(width: 8),
+                    Text(
+                      dataFormatada, 
+                      style: const TextStyle(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 4),
                 Text(
                   post.content,
@@ -608,7 +693,6 @@ class _NomosFinanceState extends State<NomosFinance> {
     );
   }
 
-  // Renderizador do Card dos Maiores Gastos (Horizontal)
   Widget _squareCard({required String title, required double valor, required Color color}) {
     return Container(
       width: 120,
@@ -643,7 +727,6 @@ class _NomosFinanceState extends State<NomosFinance> {
     );
   }
 
-  // Renderizador do Card de Imagem para a Grade de Comprovantes
   Widget _comprovanteCard(Post post, {Key? key}) {
     return Container(
       key: key,

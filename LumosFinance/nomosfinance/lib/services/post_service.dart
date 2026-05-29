@@ -3,7 +3,6 @@ import 'package:http/http.dart' as http;
 import '../data/post_model.dart';
 import '../utils/constants.dart';
 import 'auth_service.dart';
-import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb; // <-- IMPORTANTE PARA A WEB
 import 'package:image_picker/image_picker.dart'; // <-- IMPORTANTE PARA O XFILE
 

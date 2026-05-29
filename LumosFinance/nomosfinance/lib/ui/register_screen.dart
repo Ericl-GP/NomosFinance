@@ -2,7 +2,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'home.dart';
-import 'login_screen.dart';
 // Certifique-se de importar a sua tela de login caso o usuário queira voltar
 // import 'login_screen.dart'; 
 
