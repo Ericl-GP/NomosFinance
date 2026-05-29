@@ -132,7 +132,7 @@ class _NomosFinanceState extends State<NomosFinance> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 243, 224, 224),
+      backgroundColor: const Color.fromARGB(255, 77, 106, 236), // COR DE FUNDO DO APP
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color.fromARGB(255, 18, 168, 86),
         child: const Icon(Icons.add, color: Colors.white),
@@ -157,7 +157,7 @@ class _NomosFinanceState extends State<NomosFinance> {
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color.fromARGB(255, 65, 114, 248),
+                color: const Color.fromARGB(255, 87, 131, 252),
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: const [
                   BoxShadow(
@@ -214,7 +214,7 @@ class _NomosFinanceState extends State<NomosFinance> {
                 margin: const EdgeInsets.all(16),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color.fromARGB(234, 23, 116, 255),
+                  color: const Color.fromARGB(255, 87, 131, 252), //
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: const [
                     BoxShadow(
@@ -266,8 +266,8 @@ class _NomosFinanceState extends State<NomosFinance> {
             _currentIndex = index;
           });
         },
-        selectedItemColor: const Color(0xFF32794C),
-        unselectedItemColor: Colors.grey,
+        selectedItemColor: const Color.fromARGB(255, 7, 25, 187),
+        unselectedItemColor: const Color.fromARGB(248, 99, 101, 102),
         backgroundColor: Colors.white,
         type: BottomNavigationBarType.fixed,
         items: const [
@@ -301,7 +301,7 @@ class _NomosFinanceState extends State<NomosFinance> {
             child: ListView.builder(
               itemCount: historicoRecentes.length,
               itemBuilder: (context, index) {
-                return _longCard(historicoRecentes[index], const Color.fromARGB(255, 85, 87, 102));
+                return _longCard(historicoRecentes[index], const Color.fromARGB(185, 106, 105, 172));
               },
             ),
           ),
@@ -362,7 +362,7 @@ class _NomosFinanceState extends State<NomosFinance> {
           width: double.infinity,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color.fromARGB(255, 50, 80, 180),
+            color: const Color.fromARGB(255, 63, 91, 182),
             borderRadius: BorderRadius.circular(10),
             boxShadow: const [
               BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 2)),
@@ -405,7 +405,7 @@ class _NomosFinanceState extends State<NomosFinance> {
                       child: ListTile(
                         leading: Container(
                           padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(6)),
+                          decoration: BoxDecoration(color: const Color.fromARGB(66, 138, 135, 135), borderRadius: BorderRadius.circular(6)),
                           child: Text(
                             diaMeseFormatado,
                             style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
@@ -783,7 +783,7 @@ class _NomosFinanceState extends State<NomosFinance> {
                   child: Row(
                     children: [
                       Container(
-                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
+                        decoration: BoxDecoration(color: const Color.fromARGB(137, 165, 140, 140), borderRadius: BorderRadius.circular(20)), 
                         child: IconButton(
                           icon: const Icon(Icons.edit, color: Colors.white, size: 16),
                           padding: const EdgeInsets.all(4),
@@ -805,7 +805,7 @@ class _NomosFinanceState extends State<NomosFinance> {
                       ),
                       const SizedBox(width: 4),
                       Container(
-                        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
+                        decoration: BoxDecoration(color: const Color.fromARGB(137, 145, 144, 144), borderRadius: BorderRadius.circular(20)),
                         child: IconButton(
                           icon: const Icon(Icons.delete, color: Colors.white, size: 16),
                           padding: const EdgeInsets.all(4),
